@@ -134,10 +134,13 @@ fn main() -> io::Result<()> {
             // crt works
             // draw
             let crt_col = (crt_pixel % CRT_COLS) as i64;
+
             if crt_col == 0 {
                 println!("");
             }
-            if x - 1 <= crt_col && crt_col <= x + 1 {
+
+            // if x - 1 <= crt_col && crt_col <= x + 1 {
+            if let -1 ..= 1 = crt_col - x {
                 print!("█");
             } else {
                 print!(" ");
