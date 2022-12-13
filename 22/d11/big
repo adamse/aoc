@@ -1,0 +1,8 @@
+Monkey { items: vec![83, 88, 96, 79, 86, 88, 70], update: Box::new(|old| old * 5), test: 11, target1: 2, target2: 3},
+Monkey { items: vec![59, 63, 98, 85, 68, 72], update: Box::new(|old| old * 11), test: 5, target1: 4, target2: 0},
+Monkey { items: vec![90, 79, 97, 52, 90, 94, 71, 70], update: Box::new(|old| old + 2), test: 19, target1: 5, target2: 6},
+Monkey { items: vec![97, 55, 62], update: Box::new(|old| old + 5), test: 13, target1: 2, target2: 6},
+Monkey { items: vec![74, 54, 94, 76], update: Box::new(|old| old * old), test: 7, target1: 0, target2: 3},
+Monkey { items: vec![58], update: Box::new(|old| old + 4), test: 17, target1: 7, target2: 1},
+Monkey { items: vec![66, 63], update: Box::new(|old| old + 6), test: 2, target1: 7, target2: 5},
+Monkey { items: vec![56, 56, 90, 96, 68], update: Box::new(|old| old + 7), test: 3, target1: 4, target2: 1},
