@@ -48,6 +48,8 @@ fn main() {
     println!("{maxy}");
 
     {
+        let now = std::time::Instant::now();
+
         let mut grid = grid.clone();
 
         let mut total = 0u32;
@@ -82,10 +84,13 @@ fn main() {
             }
         }
 
+        println!("{}ms", now.elapsed().as_millis());
         println!("{total}");
     }
 
     {
+        let now = std::time::Instant::now();
+
         let mut sand = grid.clone();
 
         let mut total = 0u32;
@@ -123,6 +128,7 @@ fn main() {
                 }
             }
         }
+        println!("{}ms", now.elapsed().as_millis());
 
         println!("{total}");
 
