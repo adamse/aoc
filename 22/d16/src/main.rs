@@ -7,7 +7,6 @@ struct Args<'a> {
 
 fn best(
     args@Args { rates, dist }: &Args,
-    memo: &mut HashMap<(u64, u8, u8), u64>,
     stop_state: u64,
     state: u64,
     pos: u8,
@@ -19,9 +18,6 @@ fn best(
         // all valves are on
         0u64
     } else {
-        if let Some(val) = memo.get(&(state, pos, time_left)) {
-            return *val;
-        }
 
         // if we haven't turned on this one yet we choose to do so if the rate is > 0
         let bit = 1u64 << pos;
@@ -29,7 +25,7 @@ fn best(
             let rate = rates[pos as usize];
             let score = (time_left as u32 - 1) * rate;
             let score = score as u64 +
-                 best(args, memo, stop_state, state | (1 << pos), pos, time_left - 1);
+                 best(args, stop_state, state | (1 << pos), pos, time_left - 1);
 
             score
         } else {
@@ -48,16 +44,12 @@ fn best(
                 // panic!();
 
                 if d <= time_left {
-                    res = res.max(best(args, memo, stop_state, state, next as u8, time_left - d));
+                    res = res.max(best(args, stop_state, state, next as u8, time_left - d));
                 }
             }
 
             res
         };
-
-        if time_left > 0 {
-            memo.insert((state, pos, time_left), res);
-        }
 
         res
     }
@@ -134,8 +126,6 @@ fn main() {
     // state: flows that are on
     // pos: current position
 
-    let mut memo = HashMap::new();
-
     let stop_state: u64 = rates.iter().enumerate()
         .filter_map(|(i, rate)| (*rate > 0).then_some(1u64 << i as u64))
         .sum::<u64>();
@@ -146,7 +136,7 @@ fn main() {
         dist: &dist,
     };
 
-    let res = best(&args, &mut memo, stop_state, 0, names["AA"], 30);
+    let res = best(&args, stop_state, 0, names["AA"], 30);
 
 
     println!("{res}");
@@ -176,11 +166,9 @@ fn main() {
                 // println!("{my_stop_state:064b}");
                 // println!("{ele_stop_state:064b}");
 
-                let mut memo = HashMap::new();
-                let me = best(&self.args, &mut memo, my_stop_state, 0, self.names["AA"], 26);
+                let me = best(&self.args, my_stop_state, 0, self.names["AA"], 26);
 
-                let mut memo = HashMap::new();
-                let ele = best(&self.args, &mut memo, ele_stop_state, 0, self.names["AA"], 26);
+                let ele = best(&self.args, ele_stop_state, 0, self.names["AA"], 26);
 
                 me + ele
             } else {
