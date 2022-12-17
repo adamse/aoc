@@ -1,4 +1,5 @@
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 #[derive(Clone, Copy)]
 enum Dir {
@@ -16,6 +17,7 @@ type Shape = [u8; 4];
 
 struct World {
     grid: Vec<u8>,
+    top: usize,
     shapes: [Shape; 5],
     jets: Vec<Dir>,
 }
@@ -28,36 +30,25 @@ struct Fingerprint {
 }
 
 impl World {
-    fn grid_collide(&self, shape: Shape, y: usize) -> bool {
+    fn grid_collide(&self, shape: u32, y: usize) -> bool {
+        // compare the whole
+        let grid = self.grid[y..y+4].try_into().unwrap();
+        let grid = u32::from_be_bytes(grid);
 
-        for (dy, &rock_row) in shape.iter().enumerate() {
-            let y = y + dy;
-            if let Some(grid_row) = self.grid.get(y) {
-                // the grid is populated at this level
-                if rock_row & grid_row != 0 {
-                    // we hit something
-                    return true;
-                }
-            }
-        }
-
-        false
+        grid & shape > 0
     }
 
     // returns the shape as it was moved by the jet
     fn jet_move(&self, shape: Shape, y: usize, dir: Dir) -> Option<Shape> {
-        // move the shape
-        let shape = shape.map(|row| match dir {
-            // rotate left so the high bit ends up in the first bit if set, indicating that we
-            // hit the wall
-            Dir::L => row.rotate_left(1),
-            // shift right so the rightmost part ends up in the first bit if set, indicating that
-            // we hit the wall
-            Dir::R => row >> 1,
-        });
+        let shape = u32::from_be_bytes(shape);
+        let shape = match dir {
+            Dir::L => shape.rotate_left(1),
+            Dir::R => shape >> 1,
+        };
 
-        if shape.iter().any(|&row| row & 1 != 0) {
-            // we hit a wall
+        let mask = u32::from_be_bytes([1, 1, 1, 1]);
+
+        if shape & mask > 0 {
             return None;
         }
 
@@ -65,13 +56,12 @@ impl World {
             return None;
         }
 
-        // otherwise return the new shape
-        Some(shape)
+        Some(shape.to_be_bytes())
     }
 
     // returns the new y level if move was successful
     fn down_move(&self, shape: Shape, y: usize) -> Option<usize> {
-        if y == 0 || self.grid_collide(shape, y - 1) {
+        if y == 0 || self.grid_collide(u32::from_be_bytes(shape), y - 1) {
             // we hit the bottom or we hit a previous rock
             return None;
         }
@@ -85,9 +75,8 @@ impl World {
             if rock_row > 0 {
                 let y = y + dy;
 
-                while self.grid.len() < y + 1 {
-                    self.grid.push(0u8);
-                }
+                // update top row
+                self.top = self.top.max(y + 1);
 
                 if let Some(grid_row) = self.grid.get_mut(y) {
                     // fix the rock row to the grid
@@ -103,8 +92,12 @@ impl World {
     fn new_rock(&mut self, mut jet_idx: usize, rock_no: usize) -> usize {
 
         let mut shape = self.shapes[rock_no % self.shapes.len()];
-        let mut y = self.grid.len() + 3;
+        let mut y = self.top + 3;
 
+        // make space for us
+        while self.grid.len() < y + 4 {
+            self.grid.push(0u8);
+        }
 
         loop {
             let jet = self.jets[jet_idx % self.jets.len()];
@@ -129,18 +122,22 @@ impl World {
         jet_idx
     }
 
+
     // create "unique" fingerprint of the current board
     fn fingerprint(&self, rock_no: usize, jet_idx: usize) -> Fingerprint {
         // depths as seen from the top
         let depths = {
             let mut ds = [0; 7];
 
+            let diff = self.grid.len() - self.top;
+
             for ii in 0..7 {
                 let bit = 1u8 << (7 - ii);
-                let pos = self.grid.iter().rev()
+                let depth = self.grid.iter().rev()
                     .position(|&row| row & bit != 0)
-                    .unwrap_or(self.grid.len());
-                ds[ii] = pos;
+                    .map(|x| x - diff)
+                    .unwrap_or(self.top);
+                ds[ii] = depth;
             }
 
             ds
@@ -153,16 +150,19 @@ impl World {
         }
     }
 
-    fn main(&mut self) {
-        let start = std::time::Instant::now();
 
-        let mut cycle_detector = std::collections::HashMap::new();
+    fn main(&mut self) {
+
+        let mut cycle_detector = HashMap::new();
 
         let mut jet_idx = 0usize;
         let mut rock_no = 0usize;
 
 
         let (cycle_jets, cycle_rocks, cycle_height) = loop {
+            jet_idx = self.new_rock(jet_idx, rock_no);
+
+            rock_no += 1;
 
             // check if we have a cycle
 
@@ -179,17 +179,14 @@ impl World {
 
                     let cycle_jets = jet_idx - *prev_jet_idx;
                     let cycle_rocks = rock_no - *prev_rock_no;
-                    let cycle_height = self.grid.len() - *prev_grid_len;
+                    let cycle_height = self.top - *prev_grid_len;
 
                     break (cycle_jets, cycle_rocks, cycle_height);
                 } else {
-                    cycle.or_insert((jet_idx, rock_no, self.grid.len()));
+                    cycle.or_insert((jet_idx, rock_no, self.top));
                 }
             }
 
-            jet_idx = self.new_rock(jet_idx, rock_no);
-
-            rock_no += 1;
 
         };
 
@@ -198,6 +195,7 @@ impl World {
             const MAX: usize = 2022;
 
             let grid = self.grid.clone();
+            let top = self.top;
 
             let mut jet_idx = jet_idx;
             let mut rock_no = rock_no;
@@ -216,10 +214,13 @@ impl World {
 
                 rock_no += 1;
             }
-            println!("{}", self.grid.len() + total_cycle_height);
+
+            assert!(3119 == self.top + total_cycle_height);
+            // println!("{}", self.top + total_cycle_height);
 
             // reset
             self.grid = grid;
+            self.top = top;
         }
 
         // part 2
@@ -241,10 +242,10 @@ impl World {
             rock_no += 1;
         }
 
-        println!("{}", self.grid.len() + total_cycle_height);
+        assert!(1536994219669 == self.top + total_cycle_height);
+        // println!("{}", self.top + total_cycle_height);
         // println!("{}", cycle_rocks);
 
-        println!("micros: {}", start.elapsed().as_micros());
     }
 
     #[allow(dead_code)]
@@ -256,9 +257,7 @@ impl World {
             for ii in (1..8).rev() {
                 if row & (1u8 << ii) == 0 {
                     print!(".");
-                    // print!(" ");
                 } else {
-                    // print!("#");
                     print!("█");
                 }
             }
@@ -273,54 +272,55 @@ pub fn main() {
     // ....
     // ....
     // ####
-    // let em = [[1u8, 1, 1, 1], [0,0,0,0,], [0,0,0,0,], [0,0,0,0,]];
     let em = [0b00111100u8, 0, 0, 0];
 
     // ....
     // .#..
     // ###.
     // .#..
-    // let cross = [[0u8, 1, 0, 0], [1, 1, 1, 0], [0, 1, 0, 0], [0,0,0,0,]];
     let cross = [0b00010000u8, 0b00111000, 0b00010000, 0];
 
     // ....
     // ..#.
     // ..#.
     // ###.
-    // let ell = [[1u8, 1, 1, 0], [0,0,1,0,], [0,0,1,0,], [0,0,0,0,]];
     let ell = [0b00111000u8, 0b00001000, 0b00001000, 0];
 
     // #...
     // #...
     // #...
     // #...
-    // let ii = [[1u8,0,0,0], [1,0,0,0], [1,0,0,0], [1,0,0,0]];
     let ii = [0b00100000u8, 0b00100000, 0b00100000, 0b00100000];
 
     // ....
     // ....
     // ##..
     // ##..
-    // let sqr = [[1u8, 1,0,0], [1, 1,0,0], [0,0,0,0,], [0,0,0,0,]];
     let sqr = [0b00110000u8, 0b00110000, 0, 0];
 
     let shapes = [em, cross, ell, ii, sqr];
 
-    // let jets = ">>><<><>><<<>><>>><<<>>><<<><<<>><>><<>>";
+    #[allow(unused_variables)]
+    let jets = ">>><<><>><<<>><>>><<<>>><<<><<<>><>><<>>";
     let jets = std::fs::read_to_string("big").unwrap();
     let jets = jets.trim().as_bytes();
 
-    let jets = jets.iter().map(|x| match x {
+    let jets: Vec<_> = jets.iter().map(|x| match x {
         b'<' => Dir::L,
         b'>' => Dir::R,
         _ => panic!("{x}"),
     }).collect();
 
-    let mut w = World {
-        grid: vec![],
-        shapes,
-        jets,
-    };
 
-    w.main();
+    for _ in 0..100 {
+        let start = std::time::Instant::now();
+        let mut w = World {
+            grid: vec![],
+            top: 0,
+            shapes,
+            jets: jets.clone(),
+        };
+        w.main();
+        println!("micros: {}", start.elapsed().as_micros());
+    }
 }
