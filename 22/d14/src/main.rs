@@ -8,7 +8,9 @@ fn main() {
     let small = &[&path1[..], &path2[..]];
     let big = big::big();
 
-    let mut grid = std::collections::HashSet::<(i32, i32)>::new();
+    let now = std::time::Instant::now();
+
+    let mut grid = [[0u8; 1000]; 1000];
     let mut maxy = 0i32;
     let mut minx = i32::MAX;
     let mut maxx = i32::MIN;
@@ -22,6 +24,13 @@ fn main() {
             maxy = maxy.max(ay).max(by);
 
 
+            for x in ax.min(bx)..=ax.max(bx) {
+                for y in ay.min(by)..=ay.max(by) {
+                    grid[x as usize][y as usize] = 1;
+                    // grid.insert((x, y));
+                }
+            }
+            /*
             // println!("{},{} {},{}", ax, ay, bx, by);
             if ax == bx {
                 for y in ay.min(by)..=ay.max(by) {
@@ -34,9 +43,14 @@ fn main() {
             } else {
                 panic!("diagonal line: {ax},{ay} {bx},{by}");
             }
+            */
         }
     }
+    println!("{}", now.elapsed().as_micros());
 
+    println!("{} {} {}", minx, maxx, maxy);
+
+    /*
     for y in 0..=maxy {
         for x in minx..=maxx {
             let sym = if grid.contains(&(x, y)) { "█" } else { " " };
@@ -44,8 +58,7 @@ fn main() {
         }
         println!("");
     }
-
-    println!("{maxy}");
+    */
 
     {
         let now = std::time::Instant::now();
@@ -55,15 +68,33 @@ fn main() {
         let mut total = 0u32;
 
         'next_grain: loop {
-            let mut x = 500i32;
-            let mut y = 0i32;
+            let mut x = 500;
+            let mut y = 0usize;
 
             loop {
-                if y > maxy {
+                if y > maxy as usize {
                     // if we fall into the abyss we're done
                     break 'next_grain;
                 }
 
+                if grid[x][y+1] == 0 {
+                    // down
+                    y += 1;
+                } else if grid[x-1][y+1] == 0 {
+                    // down-left
+                    x -= 1;
+                    y += 1;
+                } else if grid[x+1][y+1] == 0 {
+                    // down-right
+                    x += 1;
+                    y += 1;
+                } else {
+                    // came to a stop
+                    grid[x][y] = 2;
+                    total += 1;
+                    continue 'next_grain;
+                }
+                /*
                 if !grid.contains(&(x, y+1)) {
                     // down
                     y += 1;
@@ -81,10 +112,11 @@ fn main() {
                     total += 1;
                     continue 'next_grain;
                 }
+                */
             }
         }
 
-        println!("{}ms", now.elapsed().as_millis());
+        println!("{}", now.elapsed().as_micros());
         println!("{total}");
     }
 
@@ -96,23 +128,23 @@ fn main() {
         let mut total = 0u32;
 
         'next_grain: loop {
-            let mut x = 500i32;
-            let mut y = 0i32;
+            let mut x = 500;
+            let mut y = 0;
 
             loop {
-                if y+1 == maxy+2 {
+                if y+1 == maxy as usize +2 {
                     // we're on the floor, stop
-                    sand.insert((x, y));
+                    sand[x][y] = 2;
                     total += 1;
                     continue 'next_grain;
-                } else if !sand.contains(&(x, y+1)) {
+                } else if sand[x][y+1] == 0 {
                     // down
                     y += 1;
-                } else if !sand.contains(&(x-1, y+1)) {
+                } else if sand[x-1][y+1] == 0 {
                     // down-left
                     x -= 1;
                     y += 1;
-                } else if !sand.contains(&(x+1, y+1)) {
+                } else if sand[x+1][y+1] == 0 {
                     // down-right
                     x += 1;
                     y += 1;
@@ -122,16 +154,17 @@ fn main() {
                     break 'next_grain;
                 } else {
                     // we couldn't move down, stop
-                    sand.insert((x, y));
+                    sand[x][y] = 2;
                     total += 1;
                     continue 'next_grain;
                 }
             }
         }
-        println!("{}ms", now.elapsed().as_millis());
+        println!("{}", now.elapsed().as_micros());
 
         println!("{total}");
 
+        /*
         for y in 0..=maxy {
             for x in minx..=maxx {
                 let sym = if grid.contains(&(x, y)) {
@@ -145,5 +178,6 @@ fn main() {
             }
             println!("");
         }
+        */
     }
 }
