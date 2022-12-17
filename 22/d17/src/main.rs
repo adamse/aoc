@@ -2,14 +2,20 @@ use std::collections::hash_map::Entry;
 
 #[derive(Clone, Copy)]
 enum Dir {
-    L, R, D,
+    L, R,
 }
 
-type Pos = (i64, i64);
-type Shape = [[u8; 4]; 4];
+// u8
+// 76543210
+// .......
+// .......
+// this is a line on the grid
+// we reserve bit 0, to shift into when moving left or right
+
+type Shape = [u8; 4];
 
 struct World {
-    grid: Vec<[u8; 7]>,
+    grid: Vec<u8>,
     shapes: [Shape; 5],
     jets: Vec<Dir>,
 }
@@ -21,58 +27,73 @@ struct Fingerprint {
     rock: usize,
 }
 
-
 impl World {
-    // try to move the shape in the given direction, returns new position if successful
-    fn try_move(&self, shape: &Shape, pos: Pos, dir: Dir) -> Option<Pos> {
-        // position is the bottom left of the shape
+    fn grid_collide(&self, shape: Shape, y: usize) -> bool {
 
-        let newpos = match dir {
-            Dir::L => (pos.0 - 1, pos.1),
-            Dir::R => (pos.0 + 1, pos.1),
-            Dir::D => (pos.0, pos.1 - 1),
-        };
-
-        for (y, row) in shape.iter().enumerate() {
-            for (x, &part) in row.iter().enumerate() {
-                if part > 0 {
-                    let x = newpos.0 + x as i64;
-                    let y = newpos.1 + y as i64;
-                    if x < 0 || x >= 7  || y < 0 {
-                        // collided with wall, or bottom
-                        return None;
-                    }
-                    if let Some(grid_row) = self.grid.get(y as usize) {
-                        if grid_row[x as usize] > 0 {
-                            // collided with something
-                            return None;
-                        }
-                    }
+        for (dy, &rock_row) in shape.iter().enumerate() {
+            let y = y + dy;
+            if let Some(grid_row) = self.grid.get(y) {
+                // the grid is populated at this level
+                if rock_row & grid_row != 0 {
+                    // we hit something
+                    return true;
                 }
             }
         }
 
-        Some(newpos)
+        false
+    }
+
+    // returns the shape as it was moved by the jet
+    fn jet_move(&self, shape: Shape, y: usize, dir: Dir) -> Option<Shape> {
+        // move the shape
+        let shape = shape.map(|row| match dir {
+            // rotate left so the high bit ends up in the first bit if set, indicating that we
+            // hit the wall
+            Dir::L => row.rotate_left(1),
+            // shift right so the rightmost part ends up in the first bit if set, indicating that
+            // we hit the wall
+            Dir::R => row >> 1,
+        });
+
+        if shape.iter().any(|&row| row & 1 != 0) {
+            // we hit a wall
+            return None;
+        }
+
+        if self.grid_collide(shape, y) {
+            return None;
+        }
+
+        // otherwise return the new shape
+        Some(shape)
+    }
+
+    // returns the new y level if move was successful
+    fn down_move(&self, shape: Shape, y: usize) -> Option<usize> {
+        if y == 0 || self.grid_collide(shape, y - 1) {
+            // we hit the bottom or we hit a previous rock
+            return None;
+        }
+
+        Some(y - 1)
     }
 
     // place the rock in the grid in its current position
-    fn settle(&mut self, shape: &Shape, pos: Pos) {
-        for (y, row) in shape.iter().enumerate() {
-            for (x, &part) in row.iter().enumerate() {
-                if part > 0 {
-                    let x = pos.0 as usize + x;
-                    let y = pos.1 as usize + y;
+    fn settle(&mut self, shape: Shape, y: usize) {
+        for (dy, &rock_row) in shape.iter().enumerate() {
+            if rock_row > 0 {
+                let y = y + dy;
 
-                    while self.grid.len() < y + 1 {
-                        self.grid.push([0u8, 0, 0, 0, 0, 0, 0]);
-                    }
+                while self.grid.len() < y + 1 {
+                    self.grid.push(0u8);
+                }
 
-                    if let Some(grid_row) = self.grid.get_mut(y) {
-                        // put the part in the grid
-                        grid_row[x] = part;
-                    } else {
-                        panic!("{x} {y}\n{:?}", self.grid);
-                    }
+                if let Some(grid_row) = self.grid.get_mut(y) {
+                    // fix the rock row to the grid
+                    *grid_row |= rock_row;
+                } else {
+                    panic!("{y}\n{:?}", self.grid);
                 }
             }
         }
@@ -80,29 +101,30 @@ impl World {
 
     // let a new rock fall
     fn new_rock(&mut self, mut jet_idx: usize, rock_no: usize) -> usize {
-        let shape = self.shapes[rock_no % self.shapes.len()];
 
-        let mut pos = (2i64, self.grid.len() as i64 + 3);
+        let mut shape = self.shapes[rock_no % self.shapes.len()];
+        let mut y = self.grid.len() + 3;
+
 
         loop {
             let jet = self.jets[jet_idx % self.jets.len()];
             jet_idx += 1;
 
             // see if the jet will move us
-            if let Some(newpos) = self.try_move(&shape, pos, jet) {
-                pos = newpos;
+            if let Some(newshape) = self.jet_move(shape, y, jet) {
+                shape = newshape;
             }
 
             // try to move down
-            if let Some(newpos) = self.try_move(&shape, pos, Dir::D) {
-                pos = newpos;
+            if let Some(newy) = self.down_move(shape, y) {
+                y = newy;
             } else {
                 break;
             }
         }
 
         // we have failed to move down, place the shape in the grid
-        self.settle(&shape, pos);
+        self.settle(shape, y);
 
         jet_idx
     }
@@ -114,8 +136,9 @@ impl World {
             let mut ds = [0; 7];
 
             for ii in 0..7 {
+                let bit = 1u8 << (7 - ii);
                 let pos = self.grid.iter().rev()
-                    .position(|row| row[ii] > 0)
+                    .position(|&row| row & bit != 0)
                     .unwrap_or(self.grid.len());
                 ds[ii] = pos;
             }
@@ -131,10 +154,13 @@ impl World {
     }
 
     fn main(&mut self) {
+        let start = std::time::Instant::now();
+
         let mut cycle_detector = std::collections::HashMap::new();
 
         let mut jet_idx = 0usize;
         let mut rock_no = 0usize;
+
 
         let (cycle_jets, cycle_rocks, cycle_height) = loop {
 
@@ -216,15 +242,19 @@ impl World {
         }
 
         println!("{}", self.grid.len() + total_cycle_height);
+        // println!("{}", cycle_rocks);
+
+        println!("micros: {}", start.elapsed().as_micros());
     }
 
+    #[allow(dead_code)]
     fn print_grid(&self, limit: usize) {
         println!("");
-        for (x, row) in self.grid.iter().rev().enumerate() {
+        for (x, &row) in self.grid.iter().rev().enumerate() {
             if x > limit { break; }
             print!("{:>5} ", self.grid.len() - x);
-            for &p in row {
-                if p == 0 {
+            for ii in (1..8).rev() {
+                if row & (1u8 << ii) == 0 {
                     print!(".");
                     // print!(" ");
                 } else {
@@ -239,39 +269,44 @@ impl World {
 }
 
 pub fn main() {
-// the contour of the top
-// ....
+    // ....
     // ....
     // ....
     // ####
-    let em = [[1u8, 1, 1, 1], [0,0,0,0,], [0,0,0,0,], [0,0,0,0,]];
+    // let em = [[1u8, 1, 1, 1], [0,0,0,0,], [0,0,0,0,], [0,0,0,0,]];
+    let em = [0b00111100u8, 0, 0, 0];
 
     // ....
     // .#..
     // ###.
     // .#..
-    let cross = [[0u8, 1, 0, 0], [1, 1, 1, 0], [0, 1, 0, 0], [0,0,0,0,]];
+    // let cross = [[0u8, 1, 0, 0], [1, 1, 1, 0], [0, 1, 0, 0], [0,0,0,0,]];
+    let cross = [0b00010000u8, 0b00111000, 0b00010000, 0];
 
     // ....
     // ..#.
     // ..#.
     // ###.
-    let ell = [[1u8, 1, 1, 0], [0,0,1,0,], [0,0,1,0,], [0,0,0,0,]];
+    // let ell = [[1u8, 1, 1, 0], [0,0,1,0,], [0,0,1,0,], [0,0,0,0,]];
+    let ell = [0b00111000u8, 0b00001000, 0b00001000, 0];
 
     // #...
     // #...
     // #...
     // #...
-    let ii = [[1u8,0,0,0], [1,0,0,0], [1,0,0,0], [1,0,0,0]];
+    // let ii = [[1u8,0,0,0], [1,0,0,0], [1,0,0,0], [1,0,0,0]];
+    let ii = [0b00100000u8, 0b00100000, 0b00100000, 0b00100000];
 
     // ....
     // ....
     // ##..
     // ##..
-    let sqr = [[1u8, 1,0,0], [1, 1,0,0], [0,0,0,0,], [0,0,0,0,]];
+    // let sqr = [[1u8, 1,0,0], [1, 1,0,0], [0,0,0,0,], [0,0,0,0,]];
+    let sqr = [0b00110000u8, 0b00110000, 0, 0];
+
     let shapes = [em, cross, ell, ii, sqr];
 
-    let jets = ">>><<><>><<<>><>>><<<>>><<<><<<>><>><<>>";
+    // let jets = ">>><<><>><<<>><>>><<<>>><<<><<<>><>><<>>";
     let jets = std::fs::read_to_string("big").unwrap();
     let jets = jets.trim().as_bytes();
 
@@ -280,7 +315,6 @@ pub fn main() {
         b'>' => Dir::R,
         _ => panic!("{x}"),
     }).collect();
-
 
     let mut w = World {
         grid: vec![],
