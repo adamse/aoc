@@ -148,8 +148,6 @@ fn main() {
             }
         }
 
-        assert!(positions.len() == new_positions.len());
-
         // update current positions
         positions = new_positions;
 

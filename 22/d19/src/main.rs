@@ -1,3 +1,5 @@
+#[allow(dead_code)]
+
 use std::collections::HashMap;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -24,11 +26,12 @@ struct Blueprint {
     cache: HashMap<State, u32>,
 }
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 struct State {
     production: [u16; 3],
     inventory: [u16; 3],
-    time_left: u8,
+    time_left: u16,
+    geodes: u32,
 }
 
 trait Graph: Sized {
@@ -64,21 +67,145 @@ impl Blueprint {
     }
 
     fn is_useful(&self, s: &State, bot: Bot) -> bool {
-        s.production[bot as u8 as usize] <=
+        bot == Bot::Geode ||
+            s.production[bot as u8 as usize] <=
             self.max_spend[bot as u8 as usize]
     }
 
-    fn run(&mut self, time_left: u8) -> u32 {
+    // can we build this bot now or later with our current production?
+    // returns `n` steps to wait
+    fn can_build2(&self, s: &State, bot: Bot) -> Option<u16> {
+        let mut time = 0;
+
+        if !self.is_useful(s, bot) {
+            return None;
+        }
+
+        for ii in 0..3 {
+            if self.cost[bot as usize][ii] == 0 ||
+                self.cost[bot as usize][ii] <= s.inventory[ii] {
+                continue;
+            }
+
+            if self.cost[bot as usize][ii] > 0 && s.production[ii] == 0 {
+                return None;
+            }
+
+            // cost = inventory + time * production
+            // cost/time - inventory/time = production
+            // time = (cost + inventory) / production
+            let t =
+                ((s.production[ii] - 1) +
+                  self.cost[bot as usize][ii] - s.inventory[ii]) /
+                s.production[ii];
+
+            time = time.max(t);
+        }
+
+        (time < s.time_left as u16).then_some(time)
+    }
+
+    fn next(&self, s: &State) -> Vec<State> {
+        let mut n = vec![];
+        for bot in 0u8..=3 {
+            let bot = unsafe { *(&bot as *const u8 as *const Bot) };
+
+            if let Some(t) = self.can_build2(s, bot) {
+                // fast forward to time t
+                // maybe off by one here
+                let time_left = s.time_left - t;
+
+                // add the production this bot would cause
+                let mut production = s.production;
+                match bot {
+                    Bot::Geode => {},
+                    bot => { production[bot as usize] += 1; },
+                };
+
+                // increase inventory
+                let mut inventory = s.inventory;
+                for ii in 0..3 {
+                    inventory[ii] += t * s.production[ii];
+                    inventory[ii] -= self.cost[bot as usize][ii];
+                    inventory[ii] = inventory[ii].min(time_left as u16 * self.max_spend[ii]);
+                }
+
+                // increase no of geodes
+                let mut geodes = s.geodes;
+                match bot {
+                    // maybe off by one here
+                    Bot::Geode => { geodes += time_left as u32 },
+                    _ => {},
+                };
+
+                n.push(State {
+                    time_left,
+                    production,
+                    inventory,
+                    geodes,
+                });
+            }
+        }
+
+        n
+    }
+
+    fn run2(&mut self, time_left: u16) -> u32 {
         let s = State {
             inventory: [0; 3],
             production: [1, 0, 0],
             time_left,
+            geodes: 0,
+        };
+
+        let mut max = 0u32;
+
+        let mut seen = std::collections::HashSet::new();
+
+        let mut q = std::collections::VecDeque::new();
+        q.push_back(s);
+
+        let mut c = 0;
+
+        while let Some(s) = q.pop_front() {
+
+            if seen.contains(&s) {
+                continue;
+            }
+            // assert!(c != 10);
+            c+=1;
+
+            println!("{s:?}");
+            if !(s.time_left <= time_left) {
+                println!("{s:?}");
+                assert!(s.time_left < time_left);
+            }
+
+            // println!("\n{s:?}");
+
+            max = max.max(s.geodes as u32);
+
+            for x in self.next(&s) {
+                // println!("{x:?}");
+                q.push_back(x);
+            }
+
+            seen.insert(s);
+        }
+
+        max
+    }
+
+    fn run(&mut self, time_left: u16) -> u32 {
+        let s = State {
+            inventory: [0; 3],
+            production: [1, 0, 0],
+            time_left,
+            geodes: 0,
         };
 
         self.worker(s)
     }
-
-    // fn next_states(&self, mut s: State
 
     fn worker(&mut self, mut s: State) -> u32 {
         // dfs search
@@ -161,7 +288,7 @@ fn main() {
         [[4,0,0], [2,0,0], [3,14,0], [2,0,7]],
         [[2,0,0], [3,0,0], [3,8,0], [3,0,12]],
     ];
-    let blueprints = big::BIG;
+    // let blueprints = big::BIG;
 
     let start = std::time::Instant::now();
 
@@ -170,15 +297,26 @@ fn main() {
         println!("{res}");
         (i as u32 + 1) * res
     }).sum();
+    println!("p1: {part1}");
+
+    let part1: u32 = blueprints.iter().enumerate().map(|(i, bl)| {
+        let res = Blueprint::setup(*bl).run2(24);
+        println!("{res}");
+        (i as u32 + 1) * res
+    }).sum();
+    println!("p1: {part1}");
+
+    panic!();
 
     println!("p1: {part1}");
     println!("t: {}", start.elapsed().as_millis());
 
     let part2: u32 = blueprints[0..3].iter().map(|bl| {
-        let res = Blueprint::setup(*bl).run(32);
+        let res = Blueprint::setup(*bl).run2(32);
         println!("{res}");
         res
     }).product();
+
 
     println!("p2: {part2}");
     println!("t: {}", start.elapsed().as_millis());

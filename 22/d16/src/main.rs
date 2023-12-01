@@ -3,10 +3,11 @@ use std::collections::HashMap;
 struct Args<'a> {
     rates: &'a [u32],
     dist: &'a [u8],
+    nodes: &'a [usize],
 }
 
 fn best(
-    args@Args { rates, dist }: &Args,
+    args@Args { rates, dist, .. }: &Args,
     stop_state: u64,
     state: u64,
     pos: u8,
@@ -52,6 +53,32 @@ fn best(
         };
 
         res
+    }
+}
+
+fn visit(
+    args@Args { rates, dist, nodes }: &Args,
+    state: u64,
+    pos: usize,
+    time_left: i32,
+    flows: u64,
+    // map from state to max flow
+    states: &mut HashMap<u64, u64>)
+{
+    states.entry(state).and_modify(|x| *x = flows.max(*x)).or_insert(flows);
+
+    let n = rates.len();
+
+    for &next in *nodes {
+        let d = dist[pos as usize + n * next] + 1;
+        let bit = 1u64 << next;
+        let time_left = time_left - d as i32;
+        if (state & bit) != 0 || time_left <= 0 {
+            continue;
+        }
+        visit(args, state | bit, next, time_left,
+            flows + time_left as u64 * rates[next] as u64,
+            states);
     }
 }
 
@@ -116,8 +143,14 @@ fn main() {
         dist
     };
 
+    let nodes = rates.iter()
+        .enumerate()
+        .filter_map(|(ii, &rate)|
+            (rate > 0).then_some(ii)
+        ).collect::<Vec<_>>();
+
     let setup = start.elapsed();
-    println!("setup: {:>8}", setup.as_millis());
+    println!("setup: {:>8}", setup.as_micros());
 
 
     // println!("{tunnels:?}\n{rates:?}\n{names:?}");
@@ -134,6 +167,7 @@ fn main() {
     let args = Args {
         rates: &rates,
         dist: &dist,
+        nodes: &nodes,
     };
 
     let res = best(&args, stop_state, 0, names["AA"], 30);
@@ -141,7 +175,7 @@ fn main() {
 
     println!("{res}");
     let part1 = start.elapsed() - setup;
-    println!("part1: {:>8}", part1.as_millis());
+    println!("part1: {:>8}", part1.as_micros());
 
     // part 2
     // try all partitions of the valves
@@ -186,6 +220,7 @@ fn main() {
         args: Args {
             rates: &rates,
             dist: &dist,
+            nodes: &nodes,
         },
         names: &names,
         global_stop_state: stop_state,
@@ -199,6 +234,34 @@ fn main() {
 
     println!("{res}");
     let part2 = start.elapsed() - part1 - setup;
-    println!("part2: {:>8}", part2.as_millis());
+    println!("part2: {:>8}", part2.as_micros());
+
+    let start = std::time::Instant::now();
+
+    let mut visited = HashMap::new();
+    visit(&args, 0, names["AA"] as usize, 30, 0, &mut visited);
+
+    let res = visited.values().max().unwrap();
+    println!("{res}");
+    let part1 = start.elapsed();
+    println!("part1: {:>8}", part1.as_micros());
+
+    let start = std::time::Instant::now();
+
+    let mut visited = HashMap::new();
+    visit(&args, 0, names["AA"] as usize, 26, 0, &mut visited);
+
+    let mut res = 0;
+    for (&k, &v) in visited.iter() {
+        for (&k2, &v2) in visited.iter() {
+            // skip if there is overlap
+            if (!k & k2) == 0 { continue; }
+            res = res.max(v+v2);
+        }
+    }
+
+    println!("{res}");
+    let part1 = start.elapsed();
+    println!("part1: {:>8}", part1.as_micros());
 
 }
