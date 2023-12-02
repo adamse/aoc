@@ -118,14 +118,8 @@ const VAL: [u8; 18] = [
 ];
 fn p2swar(c: &[u8]) -> u64 {
     let st = std::time::Instant::now();
-    fn mku64(i: &[u8]) -> u64 {
-        let mut a = [0u8; 8];
-        let c = 8.min(i.len());
-        (&mut a[..c]).copy_from_slice(&i[..c]);
-        u64::from_le_bytes(a)
-    }
 
-    let mut sum = 0u64;
+    let mut sum = 0u32;
     for line in c.split(|x| *x == b'\n') {
         let mut ll = [0u8; 54 + 7];
         (&mut ll[..line.len()]).copy_from_slice(line);
@@ -136,13 +130,10 @@ fn p2swar(c: &[u8]) -> u64 {
 
         for s in 0..line.len() {
             let digit = u64::from_le_bytes(<[u8; 8]>::try_from(&ll[s..s+8]).unwrap());
-            let val = (0..18).find_map(|i| {
-                if MASK[i] & digit == DIGI[i] {
-                    Some(VAL[i])
-                } else {
-                    None
-                }
-            }).unwrap_or(0) as u64;
+            let val = (0..18).map(|i| {
+                (MASK[i] & digit == DIGI[i]) as u8 * VAL[i] as u8
+            }).sum::<u8>();
+
             if a == 0 {
                 a = val;
             }
@@ -151,10 +142,35 @@ fn p2swar(c: &[u8]) -> u64 {
             }
         }
 
-        sum += 10 * a + b;
+        sum += (10 * a + b) as u32;
     }
 
     println!("{}us", st.elapsed().as_micros());
+    sum as u64
+}
+/*
+fn p2swar2(c: &[u8]) -> u64 {
+    let st = std::time::Instant::now();
+    let mut vals = vec![0u8; c.len()];
+    let r = c.as_ptr();
+
+    for s in 0..c.len() {
+        // can read a little out of bounds as a treat :3
+        let line = unsafe { r.offset(s as isize).cast::<u64>().read_unaligned() };
+        for i in 0..18 {
+            let mask = MASK[i];
+            let digi = DIGI[i];
+            let val = VAL[i];
+            vals[s] += (mask & line == digi) as u8 * val;
+        }
+    }
+
+    let sum = 0;
+
+    println!("{}us", st.elapsed().as_micros());
+    sum as u64
+}
+*/
     sum
 }
 fn main() {
@@ -162,7 +178,8 @@ fn main() {
     let c = c.trim_ascii();
     println!("{}", p1(c));
     // let c = std::fs::read("inp2.txt").unwrap(); let c = c.trim_ascii();
-    println!("{}", p2(c));
+    println!("p2 {}", p2(c));
     // not faster
-    println!("{}", p2swar(c));
+    // println!("p2 {}", p2swar(c));
+    // println!("p2 {}", p2swar2(c));
 }
