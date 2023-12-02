@@ -171,6 +171,41 @@ fn p2swar2(c: &[u8]) -> u64 {
     sum as u64
 }
 */
+fn p2table(c: &[u8]) -> u64 {
+    let st = std::time::Instant::now();
+    let mut sum = 0;
+    for line in c.split(|x| b'\n'.eq(x)) {
+        let mut state = Fwd::Start as usize;
+        let mut ix = 0;
+        while state >= 10 {
+            let byte = line[ix];
+            state = FWD[byte as usize][state] as usize;
+            ix += 1;
+        }
+        /*
+        // check if we did wrong
+        let old = unsafe { RES1[ii] };
+        if state as u64 != old {
+            println!("{old}, {state}, {}", std::str::from_utf8(line).unwrap());
+            let mut state = Fwd::Start as usize;
+            let mut ix = 0;
+            while state >= 10 {
+                let byte = line[ix];
+                let start = state;
+                state = FWD[byte as usize][state] as usize;
+                println!("{} {:?} {:?}",
+                    std::char::from_u32(byte as u32).unwrap(),
+                    unsafe { (&(start as u8) as *const u8).cast::<Fwd>().read() },
+                    unsafe { (&(state as u8) as *const u8).cast::<Fwd>().read() });
+                ix += 1;
+            }
+
+            break;
+        }*/
+        sum += state as u64;
+    }
+    println!("{}us", st.elapsed().as_micros());
+
     sum
 }
 fn main() {
@@ -182,4 +217,123 @@ fn main() {
     // not faster
     // println!("p2 {}", p2swar(c));
     // println!("p2 {}", p2swar2(c));
+    // barely faster?
+    println!("p2 {}", p2table(c));
 }
+
+#[derive(Debug)]
+#[repr(u8)]
+enum Fwd {
+    Invalid = 0,
+    F1 = 1,
+    F2 = 2,
+    F3 = 3,
+    F4 = 4,
+    F5 = 5,
+    F6 = 6,
+    F7 = 7,
+    F8 = 8,
+    F9 = 9,
+    Start = 10,
+
+    E, EI, EIG, EIGH,
+    F, FI, FIV,
+       FO, FOU,
+    N, NI, NIN,
+    O, ON,
+    S, SE, SEV, SEVE,
+       SI,
+    T, TH, THR, THRE,
+       TW,
+    END,
+}
+const FWD_COUNT: usize = Fwd::END as usize;
+
+
+// FWD[input byte][last state] = current state
+const FWD: [[u8; FWD_COUNT]; 256] = {
+
+    use Fwd::*;
+    let mut val = [[Start as u8; FWD_COUNT]; 256];
+
+    macro_rules! tr {
+        ($input:expr, $state:expr) => {
+            val[$input as usize] = [$state as u8; FWD_COUNT];
+        }
+    }
+    tr!(b'1', F1);
+    tr!(b'2', F2);
+    tr!(b'3', F3);
+    tr!(b'4', F4);
+    tr!(b'5', F5);
+    tr!(b'6', F6);
+    tr!(b'7', F7);
+    tr!(b'8', F8);
+    tr!(b'9', F9);
+
+    tr!(b'o', O);
+    tr!(b't', T);
+    tr!(b'f', F);
+    tr!(b's', S);
+    tr!(b'e', E);
+    tr!(b'n', N);
+
+    macro_rules! tr {
+        ($input:expr, $start:expr, $end:expr) => {
+            val[$input as usize][$start as usize] = $end as u8;
+        }
+    }
+    // one
+    tr!(b'o', Start, O);
+    tr!(b'n', O,     ON);
+    tr!(b'e', ON,    F1);
+    tr!(b'i', ON,    NI);
+    // two
+    tr!(b't', Start, T);
+    tr!(b'w', T,     TW);
+    tr!(b'o', TW,    F2);
+    // three
+    tr!(b't', Start, T);
+    tr!(b'h', T,     TH);
+    tr!(b'r', TH,    THR);
+    tr!(b'e', THR,   THRE);
+    tr!(b'e', THRE,  F3);
+    tr!(b'i', THRE,  EI);
+    // four
+    tr!(b'f', Start, F);
+    tr!(b'o', F,     FO);
+    tr!(b'u', FO,    FOU);
+    tr!(b'r', FOU,   F4);
+    tr!(b'n', FO,    ON);
+    // five
+    tr!(b'f', Start, F);
+    tr!(b'i', F,     FI);
+    tr!(b'v', FI,    FIV);
+    tr!(b'e', FIV,   F5);
+    // six
+    tr!(b's', Start, S);
+    tr!(b'i', S,     SI);
+    tr!(b'x', SI,    F6);
+    // seven
+    tr!(b's', Start, S);
+    tr!(b'e', S,     SE);
+    tr!(b'v', SE,    SEV);
+    tr!(b'e', SEV,   SEVE);
+    tr!(b'n', SEVE,  F7);
+    tr!(b'i', SE,    EI);
+    tr!(b'i', SEVE,  EI);
+    // eight
+    tr!(b'e', Start, E);
+    tr!(b'i', E,     EI);
+    tr!(b'g', EI,    EIG);
+    tr!(b'h', EIG,   EIGH);
+    tr!(b't', EIGH,  F8);
+    // nine
+    tr!(b'n', Start, N);
+    tr!(b'i', N,     NI);
+    tr!(b'n', NI,    NIN);
+    tr!(b'e', NIN,   F9);
+    tr!(b'i', NIN,   NI);
+
+    val
+};
