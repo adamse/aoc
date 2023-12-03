@@ -1,4 +1,5 @@
 #![feature(byte_slice_trim_ascii)]
+#![feature(slice_internals)]
 use std::collections::{HashMap, HashSet};
 
 fn partmap(i: &[u8]) -> HashMap<(i32, i32), u8> {
@@ -91,7 +92,13 @@ fn main() {
     // let i = std::fs::read("inp1.txt").unwrap();
     let i = i.trim_ascii();
 
+    let st = std::time::Instant::now();
     let parts = partmap(i);
+    eprintln!("{}us", st.elapsed().as_micros());
+    let st = std::time::Instant::now();
     println!("{}", p1(&parts, i));
+    eprintln!("{}us", st.elapsed().as_micros());
+    let st = std::time::Instant::now();
     println!("{}", p2(&parts, i));
+    eprintln!("{}us", st.elapsed().as_micros());
 }
