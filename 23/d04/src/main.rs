@@ -13,6 +13,17 @@ fn parse(i: &str) -> Vec<u32> {
         })
         .collect()
 }
+fn parse_bitmap(i: &str) -> Vec<u32> {
+    i.lines()
+        .map(|l| {
+            let bm = l.split_whitespace()
+                .filter_map(|x| x.parse::<u32>().ok())
+                .fold(0u128, |bitmap, no|
+                    (bitmap | (1u128 << no)));
+            35 - bm.count_ones()
+        })
+        .collect()
+}
 fn p1(i: &[u32]) -> u32 {
     i.iter()
         .map(|&c| if c > 0 { 1 << (c - 1) } else { 0 })
@@ -35,7 +46,7 @@ fn main() {
     let i = i.trim();
 
     let st = std::time::Instant::now();
-    let i = parse(i);
+    let i = parse_bitmap(i);
     eprintln!("{}us", st.elapsed().as_micros());
     let st = std::time::Instant::now();
     println!("{}", p1(&i[..]));
