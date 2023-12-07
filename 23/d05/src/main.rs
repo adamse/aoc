@@ -169,7 +169,7 @@ fn p1(seeds: &[u32], mappings: &[Mapping]) -> u32 {
         .min().unwrap()
 }
 fn p2(seeds: &[R], mappings: &[Mapping]) -> u64 {
-    let mut res = seeds.iter()
+    seeds.iter()
         .map(|r|
            mappings.iter().fold(vec![*r], |r, mapping| {
                // println!("{r:?}");
@@ -179,10 +179,9 @@ fn p2(seeds: &[R], mappings: &[Mapping]) -> u64 {
                r
            }))
         .flatten()
-        .collect::<Vec<_>>();
-    // res.iter().for_each(|r| println!("{r}"));
-    res.sort_by_key(|r| r.start);
-    res[0].start
+        .min_by_key(|x|x.start)
+        .unwrap()
+        .start
 }
 fn main() {
     let i = std::fs::read_to_string("inp.txt").unwrap();
