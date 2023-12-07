@@ -92,9 +92,9 @@ fn main() {
     eprintln!("{}us", st.elapsed().as_micros());
 
     let (times, dists) = parse2(i);
-    let st = std::time::Instant::now();
-    println!("{}", p2(times, dists));
-    eprintln!("{}us", st.elapsed().as_micros());
+    // let st = std::time::Instant::now();
+    // println!("{}", p2(times, dists));
+    // eprintln!("{}us", st.elapsed().as_micros());
     let st = std::time::Instant::now();
     println!("{}", p2_bisect(times, dists));
     eprintln!("{}ns", st.elapsed().as_nanos());
